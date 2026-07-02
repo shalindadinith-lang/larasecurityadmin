@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; img-src 'self' data: https:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://firebasestorage.googleapis.com wss://*.firebaseio.com; frame-ancestors 'none';" />
+    <meta http-equiv="X-Content-Type-Options" content="nosniff" />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+    <title>LARA Admin Panel | AI Training</title>
+    <!--
+      SECURITY NOTES (read before deploying):
+      1. This file adds client-side hardening (output escaping, login throttling,
+         idle-session timeout, and an admin-role check). Client-side checks can
+         always be bypassed by a determined attacker who edits the JS in their
+         own browser -- they are NOT a substitute for server-side enforcement.
+      2. The real access control for this admin panel MUST live in your
+         Firestore Security Rules and in a Firebase custom claim (e.g. admin: true)
+         set via the Firebase Admin SDK on the server. Without that, any user who
+         can create a Firebase Auth account (if sign-up is open) could read/write
+         your 'products', 'chatbotTraining', and 'lipstickRecommendations'
+         collections directly through the Firebase SDK, bypassing this HTML file
+         entirely.
+      3. Suggested Firestore rule sketch:
+           match /products/{id}        { allow read: if true; allow write: if request.auth.token.admin == true; }
+           match /chatbotTraining/{id} { allow read, write: if request.auth.token.admin == true; }
+           match /lipstickRecommendations/{id} { allow read, write: if request.auth.token.admin == true; }
+      4. Consider enabling Firebase App Check to stop abuse of your public API key,
+         and disabling public sign-up for this Firebase project if only you
+         should ever log in.
+    -->
+
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>💄</text></svg>">
+    <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Poppins:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+    <style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:'Poppins',sans-serif;background:#0a0a0a;color:#ddd;min-height:100vh;padding:20px}
+        .container{max-width:1300px;margin:0 auto}
+        h1{text-align:center;font-family:'Playfair Display',serif;color:#ccc;margin-bottom:25px;font-size:2.2rem}
+        .login-box{background:#1a1a1a;padding:35px;border-radius:20px;border:1px solid #333;max-width:420px;margin:80px auto;text-align:center}
+        .login-box h2{color:#aaa;margin-bottom:20px}
+        .login-box input{width:100%;padding:12px 15px;margin:10px 0;border:1px solid #555;border-radius:10px;background:#0a0a0a;color:#fff;font-size:1rem;outline:none}
+        .login-box input:focus{border-color:#888}
+        .admin-panel{display:none}
+        .admin-panel.active{display:block}
+        .top-bar{background:#1a1a1a;padding:15px 25px;border-radius:15px;display:flex;justify-content:space-between;align-items:center;margin-bottom:25px;border:1px solid #333;flex-wrap:wrap;gap:10px}
+        .welcome{font-weight:600;color:#bbb}
+        .tab-nav{display:flex;gap:10px;margin-bottom:25px;flex-wrap:wrap}
+        .tab-btn{padding:12px 24px;background:#1a1a1a;border:1px solid #333;border-radius:12px;color:#ddd;cursor:pointer;font-weight:600;transition:0.2s;font-family:'Poppins',sans-serif}
+        .tab-btn.active{background:#333;border-color:#555}
+        .tab-content{display:none}
+        .tab-content.active{display:block}
+        .form-card{background:#1a1a1a;border:1px solid #333;border-radius:18px;padding:25px;margin-bottom:25px}
+        .form-card h3{color:#ccc;margin-bottom:15px;font-size:1.3rem}
+        .form-row{display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:15px}
+        .form-group{margin-bottom:12px}
+        .form-group label{display:block;font-weight:600;margin-bottom:5px;color:#aaa;font-size:0.9rem}
+        .form-group input,.form-group textarea,.form-group select{width:100%;padding:10px 15px;border:1px solid #444;border-radius:10px;background:#0a0a0a;color:#fff;font-size:0.95rem;outline:none;font-family:'Poppins',sans-serif}
+        .form-group input:focus,.form-group textarea:focus,.form-group select:focus{border-color:#888}
+        .form-group textarea{height:90px;resize:vertical}
+        .colour-section{border:1px solid #333;border-radius:16px;padding:20px;background:#111;margin-bottom:15px}
+        .colour-section h4{color:#ccc;margin-bottom:15px}
+        .colour-add-area{display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:15px}
+        .color-picker-btn{width:50px;height:50px;border-radius:14px;border:2px solid #555;cursor:pointer;position:relative;overflow:hidden}
+        .color-picker-btn input[type="color"]{position:absolute;top:-10px;left:-10px;width:70px;height:70px;opacity:0;cursor:pointer}
+        .colour-preview{width:40px;height:40px;border-radius:10px;border:2px solid #555}
+        .preset-colors{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:15px}
+        .preset-swatch{width:32px;height:32px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:0.2s}
+        .preset-swatch:hover{transform:scale(1.2);border-color:#888}
+        .colour-tag-container{display:flex;flex-wrap:wrap;gap:8px;min-height:40px;padding:10px;background:#0a0a0a;border-radius:12px;border:1px dashed #555}
+        .colour-tag{display:inline-flex;align-items:center;gap:8px;padding:8px 16px;border-radius:25px;background:#1a1a1a;border:1px solid #444;font-size:0.9rem;color:#ddd}
+        .colour-tag .color-dot{width:22px;height:22px;border-radius:50%}
+        .colour-tag .remove-colour{cursor:pointer;color:#ff4444;font-weight:bold}
+        button{cursor:pointer;border:none;border-radius:10px;padding:10px 20px;font-weight:600;transition:0.2s;display:inline-flex;align-items:center;gap:6px;font-family:'Poppins',sans-serif}
+        .btn-primary{background:#444;color:#fff}
+        .btn-secondary{background:#333;color:#fff}
+        .btn-danger{background:#ff4444;color:#fff}
+        .btn-success{background:#28a745;color:#fff}
+        .btn-small{padding:6px 12px;font-size:0.8rem}
+        .product-list{margin-top:10px}
+        .product-item,.qa-item{background:#111;padding:15px 20px;border-radius:14px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;border:1px solid #333}
+        .product-item:hover,.qa-item:hover{border-color:#777}
+        .product-item img{width:70px;height:70px;object-fit:cover;border-radius:10px}
+        .mini-colour-tag{display:inline-flex;align-items:center;gap:4px;padding:3px 10px;border-radius:15px;background:#222;border:1px solid #444;font-size:0.75rem}
+        .mini-dot{width:12px;height:12px;border-radius:50%}
+        .stats-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:15px;margin-bottom:25px}
+        .stat-card{background:#1a1a1a;border:1px solid #333;border-radius:16px;padding:20px;text-align:center}
+        .stat-card .stat-number{font-size:2.5rem;font-weight:700;color:#fff}
+        .stat-card .stat-label{color:#888;font-size:0.9rem;margin-top:5px}
+        .hidden{display:none!important}
+        @media(max-width:768px){.form-row{grid-template-columns:1fr}}
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>🖤 LARA Admin Panel</h1>
+    <div class="login-box" id="loginBox">
+        <h2><i class="fas fa-lock"></i> Admin Login</h2>
+        <input type="email" id="loginEmail" placeholder="Admin Email" />
+        <input type="password" id="loginPassword" placeholder="Password" />
+        <button class="btn-primary" onclick="login()" style="width:100%;justify-content:center;"><i class="fas fa-sign-in-alt"></i> Login</button>
+    </div>
+
+    <div class="admin-panel" id="adminPanel">
+        <div class="top-bar">
+            <span class="welcome"><i class="fas fa-user-circle"></i> Welcome, <span id="adminEmail">Admin</span></span>
+            <button class="btn-secondary" onclick="logout()"><i class="fas fa-sign-out-alt"></i> Logout</button>
+        </div>
+
+        <!-- Tab Navigation -->
+        <div class="tab-nav">
+            <button class="tab-btn active" onclick="switchTab('products')"><i class="fas fa-box"></i> Products</button>
+            <button class="tab-btn" onclick="switchTab('training')"><i class="fas fa-brain"></i> AI Training</button>
+            <button class="tab-btn" onclick="switchTab('unanswered')"><i class="fas fa-question-circle"></i> Unanswered Questions</button>
+            <!-- 🔥 New Shade Finder Tab -->
+            <button class="tab-btn" id="shadeFinderTabBtn" onclick="switchTab('shadeFinder')"><i class="fas fa-magic"></i> AI Shade Finder</button>
+        </div>
+
+        <!-- Products Tab (unchanged) -->
+        <div class="tab-content active" id="productsTab">
+            <div class="form-card">
+                <h3 id="formTitle"><i class="fas fa-plus-circle"></i> Add New Product</h3>
+                <input type="hidden" id="editProductId" />
+                <div class="form-row">
+                    <div class="form-group"><label>Product Name *</label><input type="text" id="productName" placeholder="e.g., Matte Lipstick" /></div>
+                    <div class="form-group"><label>Category *</label><select id="productCategory"><option value="">Select</option><option value="Lipstick">Lipstick</option><option value="Skincare">Skincare</option><option value="Makeup">Makeup</option><option value="Perfume">Perfume</option></select></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group"><label>Price (Rs.) *</label><input type="number" id="productPrice" step="0.01" /></div>
+                    <div class="form-group"><label>Image URL</label><input type="url" id="productImage" /></div>
+                </div>
+
+                <div class="colour-section">
+                    <h4><i class="fas fa-palette"></i> Product Colours</h4>
+                    <div class="preset-colors">
+                        <div class="preset-swatch" style="background:#FF0000;" onclick="selectPreset('#FF0000','Red')"></div>
+                        <div class="preset-swatch" style="background:#000000;" onclick="selectPreset('#000000','Black')"></div>
+                        <div class="preset-swatch" style="background:#FFFFFF;border:1px solid #555;" onclick="selectPreset('#FFFFFF','White')"></div>
+                    </div>
+                    <div class="colour-add-area">
+                        <div class="color-picker-btn" id="colorPickerPreview" style="background:#888;"><input type="color" id="colorPicker" value="#888888" onchange="onColorPickerChange()" /></div>
+                        <input type="text" class="colour-name-input" id="colourNameInput" placeholder="Colour name" style="padding:10px;border:1px solid #555;border-radius:10px;background:#0a0a0a;color:#fff;" />
+                        <input type="text" class="colour-hex-input" id="colourHexInput" placeholder="#888888" maxlength="7" oninput="onHexInputChange()" style="padding:10px;border:1px solid #555;border-radius:10px;background:#0a0a0a;color:#fff;" />
+                        <div class="colour-preview" id="colourPreview" style="background:#888;"></div>
+                        <button class="add-colour-btn" onclick="addColour()" style="padding:10px 20px;background:#444;border:none;border-radius:10px;color:#fff;font-weight:700;"><i class="fas fa-plus"></i> Add</button>
+                    </div>
+                    <div class="colour-tag-container" id="colourTags"></div>
+                </div>
+
+                <div class="form-group"><label>Description</label><textarea id="productDescription"></textarea></div>
+                <div style="display:flex;gap:10px;margin-top:10px;">
+                    <button class="btn-primary" onclick="saveProduct()"><i class="fas fa-save"></i> <span id="saveBtnText">Save Product</span></button>
+                    <button class="btn-secondary hidden" id="cancelEditBtn" onclick="cancelEdit()"><i class="fas fa-times"></i> Cancel</button>
+                </div>
+            </div>
+
+            <div class="form-card">
+                <h3><i class="fas fa-list"></i> Product List (<span id="productCount">0</span>)</h3>
+                <div class="product-list" id="productList"><p style="color:#888;">Loading...</p></div>
+            </div>
+        </div>
+
+        <!-- AI Training Tab (unchanged) -->
+        <div class="tab-content" id="trainingTab">
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-number" id="trainedCount">0</div>
+                    <div class="stat-label">Trained Q&A Pairs</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="unansweredCount">0</div>
+                    <div class="stat-label">Unanswered Questions</div>
+                </div>
+            </div>
+
+            <div class="form-card">
+                <h3><i class="fas fa-brain"></i> Train AI Assistant</h3>
+                <p style="color:#888;margin-bottom:15px;">Add questions & answers to make the chatbot smarter</p>
+                <div class="form-group">
+                    <label>Question (What customer might ask) *</label>
+                    <input type="text" id="trainingQuestion" placeholder="e.g., What lipstick shades do you have?" />
+                </div>
+                <div class="form-group">
+                    <label>Keywords (comma separated, helps matching) *</label>
+                    <input type="text" id="trainingKeywords" placeholder="e.g., lipstick, shades, colours, lip color" />
+                </div>
+                <div class="form-group">
+                    <label>Answer *</label>
+                    <textarea id="trainingAnswer" placeholder="e.g., We have Matte Lipstick in Red, Pink, and Nude shades! Prices start from Rs. 1,500. 💄"></textarea>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Related Product (optional)</label>
+                        <select id="trainingProduct"><option value="">None</option></select>
+                    </div>
+                    <div class="form-group">
+                        <label>Priority</label>
+                        <select id="trainingPriority">
+                            <option value="normal">Normal</option>
+                            <option value="high">High Priority</option>
+                        </select>
+                    </div>
+                </div>
+                <button class="btn-primary" onclick="saveTraining()"><i class="fas fa-save"></i> Save Training</button>
+            </div>
+
+            <div class="form-card">
+                <h3><i class="fas fa-list"></i> Trained Responses</h3>
+                <div id="trainingList"><p style="color:#888;">Loading...</p></div>
+            </div>
+        </div>
+
+        <!-- Unanswered Questions Tab (unchanged) -->
+        <div class="tab-content" id="unansweredTab">
+            <div class="form-card">
+                <h3><i class="fas fa-question-circle"></i> Unanswered Customer Questions</h3>
+                <p style="color:#888;margin-bottom:15px;">These are questions the AI couldn't answer. Train them to improve!</p>
+                <div id="unansweredList"><p style="color:#888;">Loading...</p></div>
+            </div>
+        </div>
+
+        <!-- 🔥 AI Shade Finder Tab (new) -->
+        <div class="tab-content" id="shadeFinderTab">
+            <div class="stats-grid" id="shadeFinderStats">
+                <div class="stat-card">
+                    <div class="stat-number" id="sfTotalCustomers">0</div>
+                    <div class="stat-label">Total Customers</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-number" id="sfTotalRecommendations">0</div>
+                    <div class="stat-label">Total Recommendations</div>
+                </div>
+            </div>
+
+            <div class="form-card">
+                <h3><i class="fas fa-search"></i> Search Recommendations</h3>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Search by Name</label>
+                        <input type="text" id="sfSearchName" placeholder="Customer name..." />
+                    </div>
+                    <div class="form-group">
+                        <label>Search by Phone</label>
+                        <input type="text" id="sfSearchPhone" placeholder="Phone number..." />
+                    </div>
+                </div>
+                <button class="btn-primary" onclick="window.LARAShadeFinderAdmin.loadData()"><i class="fas fa-search"></i> Search</button>
+                <button class="btn-secondary" onclick="window.LARAShadeFinderAdmin.clearSearch()" style="margin-left:8px;"><i class="fas fa-times"></i> Clear</button>
+            </div>
+
+            <div class="form-card">
+                <h3><i class="fas fa-list"></i> Recommendations List</h3>
+                <div id="sfRecommendationsList"><p style="color:#888;">Loading...</p></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // ==================== FIREBASE CONFIG ====================
+    const firebaseConfig={apiKey:"AIzaSyAOqKpGbesbgeAfA2J_QGfomjTiY_FIfnA",authDomain:"lara-f5aed.firebaseapp.com",projectId:"lara-f5aed",storageBucket:"lara-f5aed.firebasestorage.app",messagingSenderId:"942336215471",appId:"1:942336215471:web:7971423ac9d4cff776075a"};
+    firebase.initializeApp(firebaseConfig);
+    const db=firebase.firestore(),auth=firebase.auth();
+    const storage = firebase.storage(); // for admin image deletion
+
+    let editingProductId=null,currentColours=[],currentTab='products';
+
+    // Tab switching (updated to include shadeFinder)
+    window.switchTab=(tab)=>{
+        currentTab=tab;
+        document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+        event.target.closest('.tab-btn').classList.add('active');
+        document.getElementById(tab+'Tab').classList.add('active');
+        if(tab==='training'){loadTraining();loadProductsForSelect();}
+        if(tab==='unanswered')loadUnanswered();
+        if(tab==='shadeFinder')loadShadeFinderData();
+    };
+
+    // Color picker functions (unchanged)
+    window.onColorPickerChange=()=>{const hex=document.getElementById('colorPicker').value.toUpperCase();document.getElementById('colourHexInput').value=hex;document.getElementById('colourPreview').style.background=hex;document.getElementById('colorPickerPreview').style.background=hex;};
+    window.onHexInputChange=()=>{const hexInput=document.getElementById('colourHexInput');let hex=hexInput.value.toUpperCase();if(hex&&!hex.startsWith('#')){hex='#'+hex;hexInput.value=hex;}if(/^#[0-9A-F]{6}$/.test(hex)){document.getElementById('colorPicker').value=hex;document.getElementById('colourPreview').style.background=hex;document.getElementById('colorPickerPreview').style.background=hex;}};
+    window.selectPreset=(hex,name)=>{document.getElementById('colorPicker').value=hex;document.getElementById('colourHexInput').value=hex;document.getElementById('colourNameInput').value=name;document.getElementById('colourPreview').style.background=hex;document.getElementById('colorPickerPreview').style.background=hex;};
+    window.addColour=()=>{const name=document.getElementById('colourNameInput').value.trim();let hex=document.getElementById('colourHexInput').value.trim().toUpperCase();if(!name||!hex||!/^#[0-9A-F]{6}$/.test(hex))return alert('Enter valid name and hex');if(currentColours.some(c=>c.name===name&&c.hex===hex))return alert('Already exists');currentColours.push({name,hex});renderColourTags();document.getElementById('colourNameInput').value='';document.getElementById('colourHexInput').value='#888888';document.getElementById('colourNameInput').focus();};
+    window.removeColour=(i)=>{currentColours.splice(i,1);renderColourTags();};
+    function renderColourTags(){document.getElementById('colourTags').innerHTML=currentColours.map((c,i)=>`<span class="colour-tag"><span class="color-dot" style="background:${c.hex};"></span>${c.name} <small style="color:#888;">${c.hex}</small> <span class="remove-colour" onclick="removeColour(${i})">×</span></span>`).join('');}
+
+    // ==================== SECURITY: login throttling ====================
+    // Client-side only -- slows down casual brute forcing in this tab, but is
+    // not a real defense (an attacker can call the Firebase SDK directly).
+    // Enable Firebase Authentication's built-in abuse protection / App Check
+    // on the project for real protection.
+    const LOGIN_MAX_ATTEMPTS = 5;
+    const LOGIN_LOCKOUT_MS = 30000;
+    let loginFailCount = 0, loginLockedUntil = 0;
+
+    // ==================== SECURITY: idle session auto-logout ====================
+    const IDLE_LIMIT_MS = 15 * 60 * 1000; // 15 minutes
+    let idleTimer = null;
+    function resetIdleTimer(){
+        clearTimeout(idleTimer);
+        idleTimer = setTimeout(()=>{ if(auth.currentUser){ auth.signOut(); alert('Logged out after 15 minutes of inactivity.'); } }, IDLE_LIMIT_MS);
+    }
+    ['mousemove','keydown','click','scroll','touchstart'].forEach(evt=>document.addEventListener(evt, resetIdleTimer, {passive:true}));
+
+    // Auth
+    window.login=async()=>{
+        const now=Date.now();
+        if(now<loginLockedUntil){
+            const secs=Math.ceil((loginLockedUntil-now)/1000);
+            return alert(`Too many failed attempts. Try again in ${secs}s.`);
+        }
+        const email=document.getElementById('loginEmail').value.trim(),password=document.getElementById('loginPassword').value;
+        if(!email||!password)return alert('Enter credentials');
+        try{
+            await auth.signInWithEmailAndPassword(email,password);
+            loginFailCount=0;
+        }catch(e){
+            loginFailCount++;
+            if(loginFailCount>=LOGIN_MAX_ATTEMPTS){
+                loginLockedUntil=Date.now()+LOGIN_LOCKOUT_MS;
+                loginFailCount=0;
+                alert(`Too many failed attempts. Locked for ${LOGIN_LOCKOUT_MS/1000}s.`);
+            }else{
+                alert('Login failed: '+e.message);
+            }
+        }
+    };
+    window.logout=()=>auth.signOut();
+    auth.onAuthStateChanged(async user=>{
+        if(user){
+            // SECURITY: verify an 'admin' custom claim rather than trusting
+            // "any signed-in user = admin". You must set this claim server-side
+            // (Firebase Admin SDK) for each admin account -- see head comment.
+            let isAdmin=false;
+            try{
+                const tokenResult=await user.getIdTokenResult(true);
+                isAdmin = tokenResult.claims && tokenResult.claims.admin === true;
+            }catch(e){ console.error('Claim check failed:', e); }
+
+            if(!isAdmin){
+                document.getElementById('loginBox').classList.remove('hidden');
+                document.getElementById('adminPanel').classList.remove('active');
+                alert('This account is not authorised as an admin. Contact the site owner to grant admin access.');
+                await auth.signOut();
+                return;
+            }
+
+            document.getElementById('loginBox').classList.add('hidden');
+            document.getElementById('adminPanel').classList.add('active');
+            document.getElementById('adminEmail').textContent=user.email;
+            resetIdleTimer();
+            loadProducts();
+        }else{
+            clearTimeout(idleTimer);
+            document.getElementById('loginBox').classList.remove('hidden');
+            document.getElementById('adminPanel').classList.remove('active');
+        }
+    });
+
+    // Products CRUD (unchanged)
+    async function loadProducts(){
+        const list=document.getElementById('productList');list.innerHTML='<p style="color:#888;">Loading...</p>';
+        const snap=await db.collection('products').orderBy('createdAt','desc').get();const prods=[];snap.forEach(d=>prods.push({id:d.id,...d.data()}));
+        document.getElementById('productCount').textContent=prods.length;
+        list.innerHTML=prods.map(p=>`<div class="product-item"><img src="${escapeHtmlAttr(p.image||'https://via.placeholder.com/70')}" onerror="this.src='https://via.placeholder.com/70'" /><div style="flex:1;"><strong>${escapeHtml(p.name)}</strong><small style="display:block;">${escapeHtml(p.category||'N/A')} | Rs. ${(p.price||0).toLocaleString()}</small><div>${(p.colours||[]).map(c=>`<span class="mini-colour-tag"><span class="mini-dot" style="background:${escapeHtmlAttr(typeof c==='object'?c.hex:'#ccc')};"></span>${escapeHtml(typeof c==='object'?c.name:c)}</span>`).join('')}</div></div><div style="display:flex;gap:8px;"><button class="btn-secondary btn-small" onclick="editProduct('${escapeHtmlAttr(p.id)}')"><i class="fas fa-edit"></i></button><button class="btn-danger btn-small" onclick="deleteProduct('${escapeHtmlAttr(p.id)}')"><i class="fas fa-trash"></i></button></div></div>`).join('');
+    }
+
+    async function loadProductsForSelect(){
+        const snap=await db.collection('products').orderBy('name').get();
+        const select=document.getElementById('trainingProduct');
+        select.innerHTML='<option value="">None</option>';
+        snap.forEach(d=>{const p=d.data();select.innerHTML+=`<option value="${escapeHtmlAttr(d.id)}">${escapeHtml(p.name)}</option>`;});
+    }
+
+    window.saveProduct=async()=>{
+        const name=document.getElementById('productName').value.trim(),cat=document.getElementById('productCategory').value,price=parseFloat(document.getElementById('productPrice').value),img=document.getElementById('productImage').value.trim(),desc=document.getElementById('productDescription').value.trim();
+        if(!name||!cat||isNaN(price)||price<=0)return alert('Fill required fields with a valid price');
+        if(name.length>150||desc.length>2000)return alert('Name or description is too long');
+        if(img && !/^https?:\/\//i.test(img))return alert('Image URL must start with http:// or https://');
+        const data={name,category:cat,price,image:img||'https://via.placeholder.com/300x220/1a1a1a/fff?text=No+Image',colours:[...currentColours],description:desc,updatedAt:firebase.firestore.FieldValue.serverTimestamp()};
+        if(editingProductId){await db.collection('products').doc(editingProductId).update(data);alert('Updated!');}else{data.createdAt=firebase.firestore.FieldValue.serverTimestamp();await db.collection('products').add(data);alert('Added!');}
+        resetForm();loadProducts();
+    };
+    window.editProduct=async(id)=>{const doc=await db.collection('products').doc(id).get();const p=doc.data();editingProductId=id;document.getElementById('editProductId').value=id;document.getElementById('productName').value=p.name;document.getElementById('productCategory').value=p.category;document.getElementById('productPrice').value=p.price;document.getElementById('productImage').value=p.image||'';document.getElementById('productDescription').value=p.description||'';currentColours=(p.colours||[]).map(c=>typeof c==='object'?{name:c.name,hex:c.hex}:{name:String(c),hex:'#000000'});renderColourTags();document.getElementById('formTitle').innerHTML='<i class="fas fa-edit"></i> Edit Product';document.getElementById('saveBtnText').textContent='Update Product';document.getElementById('cancelEditBtn').classList.remove('hidden');window.scrollTo({top:0,behavior:'smooth'});};
+    window.deleteProduct=async(id)=>{if(confirm('Delete?')){await db.collection('products').doc(id).delete();if(editingProductId===id)resetForm();loadProducts();}};
+    window.cancelEdit=()=>resetForm();
+    function resetForm(){editingProductId=null;document.getElementById('editProductId').value='';document.getElementById('productName').value='';document.getElementById('productCategory').value='';document.getElementById('productPrice').value='';document.getElementById('productImage').value='';document.getElementById('productDescription').value='';currentColours=[];renderColourTags();document.getElementById('formTitle').innerHTML='<i class="fas fa-plus-circle"></i> Add New Product';document.getElementById('saveBtnText').textContent='Save Product';document.getElementById('cancelEditBtn').classList.add('hidden');}
+
+    // AI Training Functions (unchanged)
+    window.saveTraining=async()=>{
+        const question=document.getElementById('trainingQuestion').value.trim();
+        const keywords=document.getElementById('trainingKeywords').value.trim();
+        const answer=document.getElementById('trainingAnswer').value.trim();
+        const productId=document.getElementById('trainingProduct').value;
+        const priority=document.getElementById('trainingPriority').value;
+        if(!question||!keywords||!answer)return alert('Fill required fields');
+        if(question.length>500||answer.length>3000)return alert('Question or answer is too long');
+        const keywordArray=keywords.split(',').map(k=>k.trim().toLowerCase()).filter(k=>k).slice(0,30);
+        await db.collection('chatbotTraining').add({
+            question,keywords:keywordArray,answer,productId:productId||null,priority,
+            createdAt:firebase.firestore.FieldValue.serverTimestamp(),
+            usageCount:0
+        });
+        alert('Training saved! ✅');
+        document.getElementById('trainingQuestion').value='';
+        document.getElementById('trainingKeywords').value='';
+        document.getElementById('trainingAnswer').value='';
+        document.getElementById('trainingProduct').value='';
+        loadTraining();
+    };
+
+    async function loadTraining(){
+        const snap=await db.collection('chatbotTraining').orderBy('createdAt','desc').get();
+        const items=[];snap.forEach(d=>items.push({id:d.id,...d.data()}));
+        document.getElementById('trainedCount').textContent=items.length;
+        const list=document.getElementById('trainingList');
+        list.innerHTML=items.map(item=>`
+            <div class="qa-item">
+                <div style="flex:1;">
+                    <strong style="color:#fff;">Q: ${escapeHtml(item.question)}</strong>
+                    <p style="color:#aaa;margin-top:5px;">A: ${escapeHtml((item.answer||'').substring(0,100))}...</p>
+                    <small style="color:#666;">Keywords: ${escapeHtml((item.keywords||[]).join(', '))} | Priority: ${escapeHtml(item.priority||'normal')} | Used: ${item.usageCount||0} times</small>
+                </div>
+                <div style="display:flex;gap:8px;">
+                    <button class="btn-danger btn-small" onclick="deleteTraining('${escapeHtmlAttr(item.id)}')"><i class="fas fa-trash"></i></button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    window.deleteTraining=async(id)=>{if(confirm('Delete this training?')){await db.collection('chatbotTraining').doc(id).delete();loadTraining();}};
+
+    // Unanswered Questions (unchanged)
+    async function loadUnanswered(){
+        const snap=await db.collection('unansweredQuestions').orderBy('timestamp','desc').limit(50).get();
+        const items=[];snap.forEach(d=>items.push({id:d.id,...d.data()}));
+        document.getElementById('unansweredCount').textContent=items.length;
+        const list=document.getElementById('unansweredList');
+        if(!items.length){list.innerHTML='<p style="color:#888;">No unanswered questions! 🎉</p>';return;}
+        list.innerHTML=items.map(item=>`
+            <div class="qa-item">
+                <div style="flex:1;">
+                    <strong style="color:#fff;">❓ ${escapeHtml(item.question)}</strong>
+                    <small style="display:block;color:#666;">Asked: ${item.timestamp?new Date(item.timestamp.toDate()).toLocaleString():'Unknown'}</small>
+                </div>
+                <div style="display:flex;gap:8px;">
+                    <button class="btn-success btn-small" onclick="trainFromUnanswered('${escapeHtmlAttr(item.id)}')"><i class="fas fa-brain"></i> Train</button>
+                    <button class="btn-danger btn-small" onclick="deleteUnanswered('${escapeHtmlAttr(item.id)}')"><i class="fas fa-trash"></i></button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    window.trainFromUnanswered=async(id)=>{
+        const doc=await db.collection('unansweredQuestions').doc(id).get();
+        const question=doc.data().question;
+        document.getElementById('trainingQuestion').value=question;
+        document.getElementById('trainingKeywords').value=question.toLowerCase().replace(/[?.,]/g,'').split(' ').filter(w=>w.length>2).join(', ');
+        document.getElementById('trainingAnswer').value='';
+        document.getElementById('trainingAnswer').focus();
+        switchTab('training');
+        await db.collection('unansweredQuestions').doc(id).delete();
+        loadUnanswered();
+    };
+
+    window.deleteUnanswered=async(id)=>{if(confirm('Delete?')){await db.collection('unansweredQuestions').doc(id).delete();loadUnanswered();}};
+
+    // ==================== 🔥 AI SHADE FINDER ADMIN FUNCTIONS ====================
+    async function loadShadeFinderData(searchName, searchPhone) {
+        const listEl = document.getElementById('sfRecommendationsList');
+        if (!listEl) return;
+        listEl.innerHTML = '<p style="color:#888;">Loading...</p>';
+
+        try {
+            let query = db.collection('lipstickRecommendations').orderBy('createdAt', 'desc');
+            if (searchName && searchName.trim()) {
+                query = query.where('customerName', '>=', searchName.trim())
+                             .where('customerName', '<=', searchName.trim() + '\uf8ff');
+            }
+            const snap = await query.limit(50).get();
+            const items = [];
+            snap.forEach(doc => items.push({ id: doc.id, ...doc.data() }));
+
+            // Client-side phone filter
+            let filtered = items;
+            if (searchPhone && searchPhone.trim()) {
+                const phoneFilter = searchPhone.trim().toLowerCase();
+                filtered = items.filter(item => (item.phone || '').toLowerCase().includes(phoneFilter));
+            }
+
+            document.getElementById('sfTotalRecommendations').textContent = filtered.length;
+            const customers = new Set(filtered.map(i => i.customerName).filter(Boolean));
+            document.getElementById('sfTotalCustomers').textContent = customers.size;
+
+            if (filtered.length === 0) {
+                listEl.innerHTML = '<p style="color:#888;">No recommendations found.</p>';
+                return;
+            }
+
+            listEl.innerHTML = filtered.map(item => `
+            <div class="qa-item" style="flex-direction:column;align-items:flex-start;">
+                <div style="display:flex;align-items:center;gap:14px;width:100%;flex-wrap:wrap;">
+                    ${item.imageURL && !item.imageURL.startsWith('data:') ? 
+                        `<img src="${escapeHtmlAttr(item.imageURL)}" style="width:60px;height:60px;object-fit:cover;border-radius:12px;" onerror="this.style.display='none'" />` : 
+                        `<div style="width:60px;height:60px;border-radius:12px;background:#333;display:flex;align-items:center;justify-content:center;color:#888;"><i class="fas fa-camera"></i></div>`}
+                    <div style="flex:1;">
+                        <strong style="color:#fff;">${escapeHtml(item.customerName || 'Unknown')}</strong>
+                        <small style="display:block;color:#aaa;">📱 ${escapeHtml(item.phone || 'N/A')}</small>
+                        <small style="color:#888;">🎨 Skin: ${escapeHtml(item.skinTone || 'N/A')} | Undertone: ${escapeHtml(item.undertone || 'N/A')}</small>
+                    </div>
+                    <small style="color:#666;">📅 ${item.createdAt ? new Date(item.createdAt.toDate()).toLocaleDateString('en-LK') : 'N/A'}</small>
+                </div>
+                ${item.recommendedProducts && item.recommendedProducts.length > 0 ? `
+                <div style="margin-top:10px;width:100%;">
+                    <small style="color:#aaa;">💄 Recommended:</small>
+                    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;">
+                        ${item.recommendedProducts.map(rp => `
+                            <span class="mini-colour-tag">
+                                <span class="mini-dot" style="background:${escapeHtmlAttr(rp.shadeHex || '#ccc')};"></span>
+                                ${escapeHtml(rp.productName || 'Product')} - ${escapeHtml(rp.shadeName || 'N/A')} 
+                                <small style="color:#888;">(${rp.score || '?'}/5)</small>
+                            </span>
+                        `).join('')}
+                    </div>
+                </div>` : '<small style="color:#888;">No product recommendations</small>'}
+                <div style="margin-top:8px;display:flex;gap:8px;">
+                    <button class="btn-danger btn-small" onclick="window.LARAShadeFinderAdmin.deleteRecommendation('${escapeHtmlAttr(item.id)}')">
+                        <i class="fas fa-trash"></i> Delete
+                    </button>
+                </div>
+            </div>`).join('');
+
+        } catch (e) {
+            console.error('❌ Load recommendations error:', e);
+            listEl.innerHTML = '<p style="color:#c0392b;">Error loading data: ' + escapeHtml(e.message) + '</p>';
+        }
+    }
+
+    async function deleteRecommendation(id) {
+        if (!confirm('Delete this recommendation permanently?')) return;
+        try {
+            const doc = await db.collection('lipstickRecommendations').doc(id).get();
+            const data = doc.data();
+            if (data && data.imageURL) {
+                // Try to delete from storage
+                try {
+                    if (data.imageURL.includes('firebasestorage.googleapis.com')) {
+                        const pathMatch = data.imageURL.match(/\/o\/(.+?)\?/);
+                        if (pathMatch) await storage.ref(decodeURIComponent(pathMatch[1])).delete();
+                    }
+                } catch (storageErr) { console.warn('Storage delete failed:', storageErr); }
+            }
+            await db.collection('lipstickRecommendations').doc(id).delete();
+            alert('Deleted! ✅');
+            loadShadeFinderData();
+        } catch (e) {
+            alert('Delete failed: ' + e.message);
+        }
+    }
+
+    function clearSearch() {
+        document.getElementById('sfSearchName').value = '';
+        document.getElementById('sfSearchPhone').value = '';
+        loadShadeFinderData();
+    }
+
+    // Helper escape functions for admin
+    function escapeHtml(str) {
+        if (typeof str !== 'string') return '';
+        const div = document.createElement('div');
+        div.textContent = str;
+        return div.innerHTML;
+    }
+    function escapeHtmlAttr(str) {
+        if (typeof str !== 'string') return '';
+        return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/'/g, '&#039;');
+    }
+
+    // Expose globally for the onclick handlers
+    window.LARAShadeFinderAdmin = {
+        loadData: () => {
+            const name = document.getElementById('sfSearchName')?.value || '';
+            const phone = document.getElementById('sfSearchPhone')?.value || '';
+            loadShadeFinderData(name, phone);
+        },
+        clearSearch,
+        deleteRecommendation
+    };
+
+    // Search event listeners
+    document.getElementById('sfSearchName')?.addEventListener('input', debounce(function() {
+        loadShadeFinderData(this.value, document.getElementById('sfSearchPhone')?.value || '');
+    }, 400));
+    document.getElementById('sfSearchPhone')?.addEventListener('input', debounce(function() {
+        loadShadeFinderData(document.getElementById('sfSearchName')?.value || '', this.value);
+    }, 400));
+
+    function debounce(fn, delay) {
+        let timer;
+        return function(...args) {
+            clearTimeout(timer);
+            timer = setTimeout(() => fn.apply(this, args), delay);
+        };
+    }
+
+    // Initial load when admin panel becomes visible
+    const observer = new MutationObserver(() => {
+        if (document.getElementById('adminPanel')?.classList.contains('active')) {
+            // Preload shade finder data when panel activates (optional)
+            observer.disconnect();
+        }
+    });
+    const adminPanelEl = document.getElementById('adminPanel');
+    if (adminPanelEl) observer.observe(adminPanelEl, { attributes: true, attributeFilter: ['class'] });
+</script>
+</body>
+</html>
